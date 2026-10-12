@@ -78,8 +78,29 @@ function quizHome(){
   <div class="quiz-hero"><div class="mode-card"><span class="tag">快速</span><h3>10 題快刷</h3><p>單題立即回饋答案與解析，適合讀完一段馬上練。</p><button class="btn btn-primary" data-quiz="practice10">開始</button></div><div class="mode-card"><span class="tag">題組</span><h3>6 組題組特訓</h3><p>同一段史料或課本圖連續考 3 題，練人物、背景、因果與影響。</p><button class="btn btn-primary" data-quiz="groups6">開始</button></div><div class="mode-card"><span class="tag">模擬</span><h3>25 題段考模式</h3><p>混入 4 組題組＋13 題單題；作答中不顯示解析，交卷後一次看成績。</p><button class="btn btn-primary" data-quiz="mock25">開始</button></div></div>
   <div class="section-title"><div><h2>依單元練習</h2><p>選一個主題，題目會集中出現</p></div></div><div class="chips">${topics.map(t=>`<button class="chip" data-topic="${esc(t)}">${esc(t)}</button>`).join('')}</div></div>`;
 }
-function sample(arr,n){return [...arr].sort(()=>Math.random()-.5).slice(0,n)}
-function shuffle(arr){return [...arr].sort(()=>Math.random()-.5)}
+function shuffle(arr){
+  const a=[...arr];
+  for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}
+  return a;
+}
+function sample(arr,n){return shuffle(arr).slice(0,n)}
+function randomizeQuestion(q,target){
+  const copy={...q,options:[...q.options]};
+  const correct=copy.options[copy.answer];
+  const others=copy.options.filter((_,i)=>i!==copy.answer);
+  const opts=[...others];
+  opts.splice(target,0,correct);
+  copy.options=opts;copy.answer=target;
+  return copy;
+}
+function prepareSingles(qs){
+  const targets=shuffle(qs.map((_,i)=>i%4));
+  return qs.map((q,i)=>randomizeQuestion(q,targets[i]));
+}
+function prepareGroup(g){
+  const targets=shuffle([0,1,2,3]);
+  return {...g,questions:g.questions.map((q,i)=>randomizeQuestion(q,targets[i%4]))};
+}
 function questionCatalog(){return [...QUESTION_BANK,...((window.QUESTION_GROUPS||[]).flatMap(g=>g.questions))]}
 function itemQuestionCount(item){return item.type==='group'?item.group.questions.length:1}
 function quizAllQuestions(){return (quiz?.items||[]).flatMap(item=>item.type==='group'?item.group.questions:[item.question])}
@@ -88,14 +109,15 @@ function startQuiz(mode,topic=null){
   let pool=topic?QUESTION_BANK.filter(q=>q.topic===topic):QUESTION_BANK;
   let items=[];
   if(mode==='mock'){
-    const gs=sample(window.QUESTION_GROUPS||[],Math.min(4,(window.QUESTION_GROUPS||[]).length));
-    const singles=sample(pool,Math.max(0,25-gs.reduce((n,g)=>n+g.questions.length,0)));
+    const rawGs=sample(window.QUESTION_GROUPS||[],Math.min(4,(window.QUESTION_GROUPS||[]).length));
+    const gs=rawGs.map(prepareGroup);
+    const singles=prepareSingles(sample(pool,Math.max(0,25-gs.reduce((n,g)=>n+g.questions.length,0))));
     items=shuffle([...gs.map(g=>({type:'group',group:g})),...singles.map(q=>({type:'single',question:q}))]);
   }else if(mode==='groups'){
-    const gs=sample(window.QUESTION_GROUPS||[],Math.min(6,(window.QUESTION_GROUPS||[]).length));
+    const gs=sample(window.QUESTION_GROUPS||[],Math.min(6,(window.QUESTION_GROUPS||[]).length)).map(prepareGroup);
     items=gs.map(g=>({type:'group',group:g}));
   }else{
-    items=sample(pool,Math.min(10,pool.length)).map(q=>({type:'single',question:q}));
+    items=prepareSingles(sample(pool,Math.min(10,pool.length))).map(q=>({type:'single',question:q}));
   }
   quiz={mode,items,itemIndex:0,correct:0,answers:{},draft:{},started:Date.now(),topic,total:items.reduce((n,x)=>n+itemQuestionCount(x),0)};
   state.route='quiz';renderQuizQuestion();
@@ -106,7 +128,7 @@ function startQuizForReview(id){
   };
   const keys=map[id]||[];let pool=QUESTION_BANK.filter(q=>keys.some(k=>q.topic.includes(k)||k.includes(q.topic)));
   if(!pool.length)pool=QUESTION_BANK;
-  const picked=sample(pool,Math.min(10,pool.length));
+  const picked=prepareSingles(sample(pool,Math.min(10,pool.length)));
   quiz={mode:'practice',items:picked.map(q=>({type:'single',question:q})),itemIndex:0,correct:0,answers:{},draft:{},started:Date.now(),topic:'重點整理：'+id,total:picked.length};state.route='quiz';renderQuizQuestion();
 }
 function gradeQuestion(q,choice){
@@ -189,7 +211,7 @@ function bind(){
   $$('[data-review-topic]').forEach(b=>b.onclick=()=>startQuizForReview(b.dataset.reviewTopic));
   const nq=$('#nextQ');if(nq)nq.onclick=nextQ;
   const sg=$('#submitGroup');if(sg)sg.onclick=submitGroup;
-  const rw=$('#redoWrong');if(rw)rw.onclick=()=>{const pool=questionCatalog().filter(q=>state.wrong[q.id]?.count>0);const picked=sample(pool,Math.min(20,pool.length));quiz={mode:'practice',items:picked.map(q=>({type:'single',question:q})),itemIndex:0,correct:0,answers:{},draft:{},started:Date.now(),topic:'錯題重練',total:picked.length};state.route='quiz';renderQuizQuestion()};
+  const rw=$('#redoWrong');if(rw)rw.onclick=()=>{const pool=questionCatalog().filter(q=>state.wrong[q.id]?.count>0);const picked=prepareSingles(sample(pool,Math.min(20,pool.length)));quiz={mode:'practice',items:picked.map(q=>({type:'single',question:q})),itemIndex:0,correct:0,answers:{},draft:{},started:Date.now(),topic:'錯題重練',total:picked.length};state.route='quiz';renderQuizQuestion()};
 }
 $('#menuBtn').onclick=()=>openDrawer('chapters');
 $('#bookmarkTopBtn').onclick=saveBookmark;
@@ -209,5 +231,5 @@ document.addEventListener('input',e=>{if(e.target.id==='searchInput')doSearch(e.
 window.addEventListener('scroll',()=>{clearTimeout(window._rt);window._rt=setTimeout(updateReadProgress,120)},{passive:true});
 window.addEventListener('resize',()=>{if(state.layout==='auto')setTheme()});
 setInterval(()=>{if(state.route==='reader'&&!document.hidden){state.readingSeconds=(state.readingSeconds||0)+15;save()}},15000);
-if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js?v=5.0.0',{updateViaCache:'none'}).then(r=>r.update()).catch(()=>{});
+if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js?v=6.0.0',{updateViaCache:'none'}).then(r=>r.update()).catch(()=>{});
 render();
