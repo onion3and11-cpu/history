@@ -42,7 +42,7 @@ function render(){
 function homeView(){
   const ch=BOOK_CHAPTERS[state.chapter];
   return `<div class="container">
-  <section class="hero"><img class="cover" src="assets/cover.png" alt="封面"><div class="hero-panel"><div class="eyebrow">ONLY FOR THIS BOOK · READ × REVIEW × QUIZ</div><h1>${BOOK_META.title}</h1><div class="subtitle">${BOOK_META.subtitle}<br><br>先把故事讀進腦中，再用「重點整理」看課本圖，最後用段考型題目檢查自己。</div><div class="actions"><button class="btn btn-primary" data-action="continue">繼續閱讀</button><button class="btn btn-secondary" data-route="review">重點整理</button><button class="btn btn-secondary" data-route="quiz">直接做題</button></div></div></section>
+  <section class="hero"><img class="cover" src="cover.png" alt="封面"><div class="hero-panel"><div class="eyebrow">ONLY FOR THIS BOOK · READ × REVIEW × QUIZ</div><h1>${BOOK_META.title}</h1><div class="subtitle">${BOOK_META.subtitle}<br><br>先把故事讀進腦中，再用「重點整理」看課本圖，最後用段考型題目檢查自己。</div><div class="actions"><button class="btn btn-primary" data-action="continue">繼續閱讀</button><button class="btn btn-secondary" data-route="review">重點整理</button><button class="btn btn-secondary" data-route="quiz">直接做題</button></div></div></section>
   <div class="stats-grid"><div class="stat"><b>${progressPct()}%</b><small>閱讀進度</small></div><div class="stat"><b>${accuracy()}%</b><small>總答對率</small></div><div class="stat"><b>${wrongCount()}</b><small>錯題待複習</small></div><div class="stat"><b>${Math.round((state.readingSeconds||0)/60)}</b><small>閱讀分鐘</small></div></div>
   <div class="section-title"><div><h2>繼續上次進度</h2><p>${esc(ch.title)}</p></div></div><div class="card continue-card"><div><div class="progress"><i style="width:${progressPct()}%"></i></div><p style="color:var(--muted);margin-bottom:0">目前第 ${state.chapter+1}/${BOOK_CHAPTERS.length} 篇 · 自動記錄閱讀位置</p></div><button class="btn btn-primary" data-action="continue">打開</button></div>
   <div class="section-title"><div><h2>章節</h2><p>共 ${BOOK_CHAPTERS.length} 篇</p></div></div><div class="chapter-grid">${BOOK_CHAPTERS.map((c,i)=>`<button class="chapter-card" data-ch="${i}" style="text-align:left"><small>${state.readChapters[i]?'✓ 已讀':'CH '+String(i+1).padStart(2,'0')}</small><h3>${esc(c.title)}</h3><span style="color:var(--muted);font-size:13px">約 ${Math.max(1,Math.round(c.chars/800))} 分鐘</span></button>`).join('')}</div>
@@ -72,7 +72,7 @@ function reviewView(){
 }
 function quizHome(){
   const topics=[...new Set(QUESTION_BANK.map(q=>q.topic))];
-  return `<div class="container"><div class="section-title"><div><h2>段考練習</h2><p>${QUESTION_BANK.length} 題原創題庫 · 參考公開高中段考常見的資料判讀、圖表辨識與跨章因果題型</p></div><button class="btn btn-secondary" data-route="wrong">錯題本 ${wrongCount()?`(${wrongCount()})`:''}</button></div>
+  return `<div class="container"><div class="section-title"><div><h2>段考練習</h2><p>${QUESTION_BANK.length} 題題庫 · 題型參考公開高中段考與大考中心題型，題幹已重新改寫，含資料判讀、圖表辨識與跨章因果</p></div><button class="btn btn-secondary" data-route="wrong">錯題本 ${wrongCount()?`(${wrongCount()})`:''}</button></div>
   <div class="quiz-hero"><div class="mode-card"><span class="tag">快速</span><h3>10 題快刷</h3><p>立即回饋答案與解析，適合讀完一段馬上練。</p><button class="btn btn-primary" data-quiz="practice10">開始</button></div><div class="mode-card"><span class="tag">模擬</span><h3>25 題段考模式</h3><p>作答中不顯示解析，交卷後一次看成績與章節弱點。</p><button class="btn btn-primary" data-quiz="mock25">開始</button></div></div>
   <div class="section-title"><div><h2>依單元練習</h2><p>選一個主題，題目會集中出現</p></div></div><div class="chips">${topics.map(t=>`<button class="chip" data-topic="${esc(t)}">${esc(t)}</button>`).join('')}</div></div>`;
 }
