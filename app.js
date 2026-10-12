@@ -72,26 +72,90 @@ function reviewView(){
 }
 function quizHome(){
   const topics=[...new Set(QUESTION_BANK.map(q=>q.topic))];
-  return `<div class="container"><div class="section-title"><div><h2>段考練習</h2><p>${QUESTION_BANK.length} 題題庫 · 題型參考公開高中段考與大考中心題型，題幹已重新改寫，含資料判讀、圖表辨識與跨章因果</p></div><button class="btn btn-secondary" data-route="wrong">錯題本 ${wrongCount()?`(${wrongCount()})`:''}</button></div>
-  <div class="quiz-hero"><div class="mode-card"><span class="tag">快速</span><h3>10 題快刷</h3><p>立即回饋答案與解析，適合讀完一段馬上練。</p><button class="btn btn-primary" data-quiz="practice10">開始</button></div><div class="mode-card"><span class="tag">模擬</span><h3>25 題段考模式</h3><p>作答中不顯示解析，交卷後一次看成績與章節弱點。</p><button class="btn btn-primary" data-quiz="mock25">開始</button></div></div>
+  const groupCount=(window.QUESTION_GROUPS||[]).length;
+  const groupQuestionCount=(window.QUESTION_GROUPS||[]).reduce((n,g)=>n+g.questions.length,0);
+  return `<div class="container"><div class="section-title"><div><h2>段考練習</h2><p>${QUESTION_BANK.length} 題單題＋${groupCount} 組／${groupQuestionCount} 題題組 · 題型參考公開高中段考常見的史料、圖表、因果與跨章整合題，題幹重新改寫</p></div><button class="btn btn-secondary" data-route="wrong">錯題本 ${wrongCount()?`(${wrongCount()})`:''}</button></div>
+  <div class="quiz-hero"><div class="mode-card"><span class="tag">快速</span><h3>10 題快刷</h3><p>單題立即回饋答案與解析，適合讀完一段馬上練。</p><button class="btn btn-primary" data-quiz="practice10">開始</button></div><div class="mode-card"><span class="tag">題組</span><h3>6 組題組特訓</h3><p>同一段史料或課本圖連續考 3 題，練人物、背景、因果與影響。</p><button class="btn btn-primary" data-quiz="groups6">開始</button></div><div class="mode-card"><span class="tag">模擬</span><h3>25 題段考模式</h3><p>混入 4 組題組＋13 題單題；作答中不顯示解析，交卷後一次看成績。</p><button class="btn btn-primary" data-quiz="mock25">開始</button></div></div>
   <div class="section-title"><div><h2>依單元練習</h2><p>選一個主題，題目會集中出現</p></div></div><div class="chips">${topics.map(t=>`<button class="chip" data-topic="${esc(t)}">${esc(t)}</button>`).join('')}</div></div>`;
 }
 function sample(arr,n){return [...arr].sort(()=>Math.random()-.5).slice(0,n)}
-function startQuiz(mode,topic=null){let pool=topic?QUESTION_BANK.filter(q=>q.topic===topic):QUESTION_BANK;let n=mode==='mock'?25:10;quiz={mode,questions:sample(pool,Math.min(n,pool.length)),i:0,selected:null,correct:0,answers:[],started:Date.now(),topic};state.route='quiz';renderQuizQuestion();}
+function shuffle(arr){return [...arr].sort(()=>Math.random()-.5)}
+function questionCatalog(){return [...QUESTION_BANK,...((window.QUESTION_GROUPS||[]).flatMap(g=>g.questions))]}
+function itemQuestionCount(item){return item.type==='group'?item.group.questions.length:1}
+function quizAllQuestions(){return (quiz?.items||[]).flatMap(item=>item.type==='group'?item.group.questions:[item.question])}
+function quizAnsweredCount(){return Object.keys(quiz?.answers||{}).length}
+function startQuiz(mode,topic=null){
+  let pool=topic?QUESTION_BANK.filter(q=>q.topic===topic):QUESTION_BANK;
+  let items=[];
+  if(mode==='mock'){
+    const gs=sample(window.QUESTION_GROUPS||[],Math.min(4,(window.QUESTION_GROUPS||[]).length));
+    const singles=sample(pool,Math.max(0,25-gs.reduce((n,g)=>n+g.questions.length,0)));
+    items=shuffle([...gs.map(g=>({type:'group',group:g})),...singles.map(q=>({type:'single',question:q}))]);
+  }else if(mode==='groups'){
+    const gs=sample(window.QUESTION_GROUPS||[],Math.min(6,(window.QUESTION_GROUPS||[]).length));
+    items=gs.map(g=>({type:'group',group:g}));
+  }else{
+    items=sample(pool,Math.min(10,pool.length)).map(q=>({type:'single',question:q}));
+  }
+  quiz={mode,items,itemIndex:0,correct:0,answers:{},draft:{},started:Date.now(),topic,total:items.reduce((n,x)=>n+itemQuestionCount(x),0)};
+  state.route='quiz';renderQuizQuestion();
+}
 function startQuizForReview(id){
   const map={
     'near-east':['兩河與埃及'],'hellenistic':['希臘'],'rome':['羅馬'],'hebrews':['希伯來與基督教','基督教'],'middle-ages':['中古','中古歐洲'],'renaissance':['文藝復興'],'reformation':['宗教改革'],'westphalia':['宗教改革'],'science':['科學革命'],'enlightenment':['啟蒙']
   };
   const keys=map[id]||[];let pool=QUESTION_BANK.filter(q=>keys.some(k=>q.topic.includes(k)||k.includes(q.topic)));
   if(!pool.length)pool=QUESTION_BANK;
-  quiz={mode:'practice',questions:sample(pool,Math.min(10,pool.length)),i:0,selected:null,correct:0,answers:[],started:Date.now(),topic:'重點整理：'+id};state.route='quiz';renderQuizQuestion();
+  const picked=sample(pool,Math.min(10,pool.length));
+  quiz={mode:'practice',items:picked.map(q=>({type:'single',question:q})),itemIndex:0,correct:0,answers:{},draft:{},started:Date.now(),topic:'重點整理：'+id,total:picked.length};state.route='quiz';renderQuizQuestion();
 }
-function renderQuizQuestion(){const v=$('#view');const q=quiz.questions[quiz.i];const answered=quiz.answers[quiz.i];v.innerHTML=`<div class="question-card"><div class="q-top"><span>${quiz.mode==='mock'?'模擬段考':'練習模式'} · ${esc(q.topic)} · ${esc(q.difficulty)}</span><span>${quiz.i+1}/${quiz.questions.length}</span></div><div class="progress" style="margin:14px 0 24px"><i style="width:${(quiz.i+1)/quiz.questions.length*100}%"></i></div><h2>${esc(q.stem)}</h2>${q.image?`<img class="q-image" src="${q.image}" alt="題目附圖">`:''}<div class="options">${q.options.map((o,i)=>`<button class="option ${answered? (i===q.answer?'correct':(i===answered.choice&&i!==q.answer?'wrong':'')) : ''}" data-opt="${i}" ${answered?'disabled':''}><b>${String.fromCharCode(65+i)}.</b> ${esc(o)}</button>`).join('')}</div>${answered&&quiz.mode!=='mock'?`<div class="explain"><b>${answered.correct?'答對了':'這題要再看一次'}</b><br>${esc(q.explanation)}</div>`:''}<div class="actions" style="justify-content:flex-end">${answered?`<button class="btn btn-primary" id="nextQ">${quiz.i===quiz.questions.length-1?'看結果':'下一題'}</button>`:''}</div></div>`;bind();updateTopbar();}
-function choose(i){if(quiz.answers[quiz.i])return;const q=quiz.questions[quiz.i],ok=i===q.answer;quiz.answers[quiz.i]={qid:q.id,choice:i,correct:ok};if(ok)quiz.correct++;if(!ok){state.wrong[q.id]={count:(state.wrong[q.id]?.count||0)+1,last:Date.now()}}else if(state.wrong[q.id]){state.wrong[q.id].count=Math.max(0,state.wrong[q.id].count-1)}save();if(quiz.mode==='mock'){quiz.i++;if(quiz.i>=quiz.questions.length)finishQuiz();else renderQuizQuestion()}else renderQuizQuestion();}
-function nextQ(){quiz.i++;if(quiz.i>=quiz.questions.length)finishQuiz();else renderQuizQuestion()}
-function finishQuiz(){const rec={date:Date.now(),correct:quiz.correct,total:quiz.questions.length,mode:quiz.mode,topic:quiz.topic||'全範圍',ids:quiz.questions.map(q=>q.id)};(state.quizHistory||(state.quizHistory=[])).unshift(rec);state.quizHistory=state.quizHistory.slice(0,30);save();const by={};quiz.questions.forEach((q,i)=>{by[q.topic]??={c:0,t:0};by[q.topic].t++;if(quiz.answers[i]?.correct)by[q.topic].c++});$('#view').innerHTML=`<div class="container" style="max-width:760px"><div class="card" style="text-align:center"><div class="eyebrow">RESULT</div><div class="result-score">${Math.round(quiz.correct/quiz.questions.length*100)}</div><h2>${quiz.correct} / ${quiz.questions.length}</h2><p style="color:var(--muted)">${quiz.correct/quiz.questions.length>=.8?'很穩，接下來刷錯題就好。':quiz.correct/quiz.questions.length>=.6?'有基礎，建議針對弱單元再練。':'先回小說或重點整理補脈絡，再刷錯題會更有效。'}</p></div><div class="section-title"><h2>單元表現</h2></div><div class="card">${Object.entries(by).map(([t,x])=>`<div class="topic-row"><span>${esc(t)}</span><div class="progress"><i style="width:${x.c/x.t*100}%"></i></div><b>${x.c}/${x.t}</b></div>`).join('')}</div><div class="actions"><button class="btn btn-primary" data-route="wrong">練錯題</button><button class="btn btn-secondary" data-route="review">重點整理</button><button class="btn btn-secondary" data-route="quiz">再選一組</button></div></div>`;quiz=null;bind();}
-function wrongView(){const ids=Object.entries(state.wrong||{}).filter(([,v])=>v.count>0).sort((a,b)=>b[1].count-a[1].count).map(([id])=>id);const qs=ids.map(id=>QUESTION_BANK.find(q=>q.id===id)).filter(Boolean);return `<div class="container"><div class="section-title"><div><h2>錯題本</h2><p>答對會逐步降低錯題權重</p></div>${qs.length?`<button class="btn btn-primary" id="redoWrong">重練錯題</button>`:''}</div>${qs.length?`<div class="wrong-list">${qs.map(q=>`<div class="wrong-item"><span class="tag">${esc(q.topic)}</span><h4>${esc(q.stem)}</h4><small style="color:var(--muted)">錯誤權重 ${state.wrong[q.id].count}</small></div>`).join('')}</div>`:`<div class="empty">目前沒有錯題。去做一組題目吧 ✦</div>`}</div>`}
-function statsView(){const hist=state.quizHistory||[];const topicMap={};QUESTION_BANK.forEach(q=>topicMap[q.topic]??={wrong:0});Object.entries(state.wrong||{}).forEach(([id,v])=>{const q=QUESTION_BANK.find(x=>x.id===id);if(q&&v.count>0)topicMap[q.topic].wrong+=v.count});return `<div class="container"><div class="section-title"><div><h2>學習紀錄</h2><p>只存於這台裝置的瀏覽器</p></div><button class="btn btn-secondary" data-route="wrong">錯題本 ${wrongCount()?`(${wrongCount()})`:''}</button></div><div class="stats-grid"><div class="stat"><b>${progressPct()}%</b><small>閱讀進度</small></div><div class="stat"><b>${accuracy()}%</b><small>總答對率</small></div><div class="stat"><b>${hist.length}</b><small>測驗次數</small></div><div class="stat"><b>${wrongCount()}</b><small>錯題數</small></div></div><div class="section-title"><h2>弱點雷達（錯題權重）</h2></div><div class="card">${Object.entries(topicMap).map(([t,x])=>`<div class="topic-row"><span>${esc(t)}</span><div class="progress"><i style="width:${Math.max(5,100-Math.min(100,x.wrong*15))}%"></i></div><b>${x.wrong}</b></div>`).join('')}</div><div class="section-title"><h2>最近測驗</h2></div><div class="history-list">${hist.length?hist.slice(0,8).map(h=>`<div class="card"><b>${esc(h.topic)} · ${h.mode==='mock'?'段考模式':'練習'}</b><span style="float:right;font-weight:900;color:var(--primary)">${h.correct}/${h.total}</span><div style="clear:both;color:var(--muted);font-size:13px;margin-top:6px">${new Date(h.date).toLocaleString()}</div></div>`).join(''):`<div class="empty">還沒有測驗紀錄。</div>`}</div></div>`}
+function gradeQuestion(q,choice){
+  const ok=choice===q.answer;
+  quiz.answers[q.id]={qid:q.id,choice,correct:ok};
+  if(ok)quiz.correct++;
+  if(!ok){state.wrong[q.id]={count:(state.wrong[q.id]?.count||0)+1,last:Date.now()}}
+  else if(state.wrong[q.id]){state.wrong[q.id].count=Math.max(0,state.wrong[q.id].count-1)}
+  return ok;
+}
+function renderQuizQuestion(){
+  const v=$('#view'),item=quiz.items[quiz.itemIndex];
+  if(item.type==='group')return renderGroupItem(v,item.group);
+  const q=item.question,answered=quiz.answers[q.id];
+  const now=Math.min(quiz.total,quizAnsweredCount()+ (answered?0:1));
+  v.innerHTML=`<div class="question-card"><div class="q-top"><span>${quiz.mode==='mock'?'模擬段考':'練習模式'} · ${esc(q.topic)} · ${esc(q.difficulty)}</span><span>${now}/${quiz.total}</span></div><div class="progress" style="margin:14px 0 24px"><i style="width:${quizAnsweredCount()/quiz.total*100}%"></i></div><h2>${esc(q.stem)}</h2>${q.image?`<img class="q-image" src="${q.image}" alt="題目附圖">`:''}<div class="options">${q.options.map((o,i)=>`<button class="option ${answered? (i===q.answer?'correct':(i===answered.choice&&i!==q.answer?'wrong':'')) : ''}" data-opt="${i}" ${answered?'disabled':''}><b>${String.fromCharCode(65+i)}.</b> ${esc(o)}</button>`).join('')}</div>${answered&&quiz.mode!=='mock'?`<div class="explain"><b>${answered.correct?'答對了':'這題要再看一次'}</b><br>${esc(q.explanation)}</div>`:''}<div class="actions" style="justify-content:flex-end">${answered?`<button class="btn btn-primary" id="nextQ">${quiz.itemIndex===quiz.items.length-1?'看結果':'下一題'}</button>`:''}</div></div>`;bind();updateTopbar();
+}
+function renderGroupItem(v,g){
+  const submitted=g.questions.every(q=>quiz.answers[q.id]);
+  const allPicked=g.questions.every(q=>Object.prototype.hasOwnProperty.call(quiz.draft,q.id));
+  const startNo=quizAnsweredCount()+1;
+  const endNo=Math.min(quiz.total,startNo+g.questions.length-1);
+  const media=g.images?.length?`<div class="group-images">${g.images.map(src=>`<img class="q-image" src="${src}" alt="${esc(g.title)}附圖">`).join('')}</div>`:(g.image?`<img class="q-image" src="${g.image}" alt="${esc(g.title)}附圖">`:'');
+  v.innerHTML=`<div class="question-card group-card"><div class="q-top"><span>${quiz.mode==='mock'?'模擬段考｜題組':'題組特訓'} · ${esc(g.topic)}</span><span>${startNo}–${endNo}/${quiz.total}</span></div><div class="progress" style="margin:14px 0 24px"><i style="width:${quizAnsweredCount()/quiz.total*100}%"></i></div><section class="group-stimulus"><div class="eyebrow">SOURCE SET</div><h2>${esc(g.title)}</h2><p>${esc(g.stimulus)}</p>${media}</section><div class="group-questions">${g.questions.map((q,qi)=>{const ans=quiz.answers[q.id],draft=quiz.draft[q.id];return `<section class="group-question"><div class="group-qno">第 ${qi+1} 題 · ${esc(q.difficulty)}</div><h3>${esc(q.stem)}</h3><div class="options">${q.options.map((o,i)=>{let cls='';if(submitted&&quiz.mode!=='mock'){cls=i===q.answer?'correct':(i===ans?.choice&&i!==q.answer?'wrong':'')}else if(!submitted&&draft===i)cls='selected';return `<button class="option ${cls}" data-gqid="${esc(q.id)}" data-gopt="${i}" ${submitted?'disabled':''}><b>${String.fromCharCode(65+i)}.</b> ${esc(o)}</button>`}).join('')}</div>${submitted&&quiz.mode!=='mock'?`<div class="explain"><b>${ans?.correct?'答對':'答案：'+String.fromCharCode(65+q.answer)}</b><br>${esc(q.explanation)}</div>`:''}</section>`}).join('')}</div><div class="actions" style="justify-content:flex-end">${submitted?`<button class="btn btn-primary" id="nextQ">${quiz.itemIndex===quiz.items.length-1?'看結果':'下一題組'}</button>`:`<button class="btn btn-primary" id="submitGroup" ${allPicked?'':'disabled'}>送出這一題組</button>`}</div></div>`;bind();updateTopbar();
+}
+function choose(i){
+  const item=quiz.items[quiz.itemIndex];if(item.type!=='single')return;
+  const q=item.question;if(quiz.answers[q.id])return;
+  gradeQuestion(q,i);save();
+  if(quiz.mode==='mock'){advanceQuizItem()}else renderQuizQuestion();
+}
+function chooseGroup(qid,i){if(quiz.answers[qid])return;quiz.draft[qid]=i;renderQuizQuestion()}
+function submitGroup(){
+  const item=quiz.items[quiz.itemIndex];if(item.type!=='group')return;
+  const g=item.group;if(!g.questions.every(q=>Object.prototype.hasOwnProperty.call(quiz.draft,q.id)))return;
+  g.questions.forEach(q=>gradeQuestion(q,quiz.draft[q.id]));save();
+  if(quiz.mode==='mock'){advanceQuizItem()}else renderQuizQuestion();
+}
+function nextQ(){advanceQuizItem()}
+function advanceQuizItem(){quiz.itemIndex++;quiz.draft={};if(quiz.itemIndex>=quiz.items.length)finishQuiz();else renderQuizQuestion()}
+function finishQuiz(){
+  const qs=quizAllQuestions(),total=quiz.total;
+  const rec={date:Date.now(),correct:quiz.correct,total,mode:quiz.mode,topic:quiz.topic||(quiz.mode==='groups'?'題組特訓':'全範圍'),ids:qs.map(q=>q.id)};
+  (state.quizHistory||(state.quizHistory=[])).unshift(rec);state.quizHistory=state.quizHistory.slice(0,30);save();
+  const by={};qs.forEach(q=>{by[q.topic]??={c:0,t:0};by[q.topic].t++;if(quiz.answers[q.id]?.correct)by[q.topic].c++});
+  $('#view').innerHTML=`<div class="container" style="max-width:760px"><div class="card" style="text-align:center"><div class="eyebrow">RESULT</div><div class="result-score">${Math.round(quiz.correct/total*100)}</div><h2>${quiz.correct} / ${total}</h2><p style="color:var(--muted)">${quiz.correct/total>=.8?'很穩，接下來刷錯題就好。':quiz.correct/total>=.6?'有基礎，建議針對弱單元再練。':'先回小說或重點整理補脈絡，再刷錯題會更有效。'}</p></div><div class="section-title"><h2>單元表現</h2></div><div class="card">${Object.entries(by).map(([t,x])=>`<div class="topic-row"><span>${esc(t)}</span><div class="progress"><i style="width:${x.c/x.t*100}%"></i></div><b>${x.c}/${x.t}</b></div>`).join('')}</div><div class="actions"><button class="btn btn-primary" data-route="wrong">練錯題</button><button class="btn btn-secondary" data-route="review">重點整理</button><button class="btn btn-secondary" data-route="quiz">再選一組</button></div></div>`;quiz=null;bind();
+}
+function wrongView(){const ids=Object.entries(state.wrong||{}).filter(([,v])=>v.count>0).sort((a,b)=>b[1].count-a[1].count).map(([id])=>id);const catalog=questionCatalog();const qs=ids.map(id=>catalog.find(q=>q.id===id)).filter(Boolean);return `<div class="container"><div class="section-title"><div><h2>錯題本</h2><p>答對會逐步降低錯題權重</p></div>${qs.length?`<button class="btn btn-primary" id="redoWrong">重練錯題</button>`:''}</div>${qs.length?`<div class="wrong-list">${qs.map(q=>`<div class="wrong-item"><span class="tag">${esc(q.topic)}</span><h4>${esc(q.stem)}</h4><small style="color:var(--muted)">錯誤權重 ${state.wrong[q.id].count}</small></div>`).join('')}</div>`:`<div class="empty">目前沒有錯題。去做一組題目吧 ✦</div>`}</div>`}
+function statsView(){const hist=state.quizHistory||[];const topicMap={};questionCatalog().forEach(q=>topicMap[q.topic]??={wrong:0});Object.entries(state.wrong||{}).forEach(([id,v])=>{const q=questionCatalog().find(x=>x.id===id);if(q&&v.count>0)topicMap[q.topic].wrong+=v.count});return `<div class="container"><div class="section-title"><div><h2>學習紀錄</h2><p>只存於這台裝置的瀏覽器</p></div><button class="btn btn-secondary" data-route="wrong">錯題本 ${wrongCount()?`(${wrongCount()})`:''}</button></div><div class="stats-grid"><div class="stat"><b>${progressPct()}%</b><small>閱讀進度</small></div><div class="stat"><b>${accuracy()}%</b><small>總答對率</small></div><div class="stat"><b>${hist.length}</b><small>測驗次數</small></div><div class="stat"><b>${wrongCount()}</b><small>錯題數</small></div></div><div class="section-title"><h2>弱點雷達（錯題權重）</h2></div><div class="card">${Object.entries(topicMap).map(([t,x])=>`<div class="topic-row"><span>${esc(t)}</span><div class="progress"><i style="width:${Math.max(5,100-Math.min(100,x.wrong*15))}%"></i></div><b>${x.wrong}</b></div>`).join('')}</div><div class="section-title"><h2>最近測驗</h2></div><div class="history-list">${hist.length?hist.slice(0,8).map(h=>`<div class="card"><b>${esc(h.topic)} · ${h.mode==='mock'?'段考模式':'練習'}</b><span style="float:right;font-weight:900;color:var(--primary)">${h.correct}/${h.total}</span><div style="clear:both;color:var(--muted);font-size:13px;margin-top:6px">${new Date(h.date).toLocaleString()}</div></div>`).join(''):`<div class="empty">還沒有測驗紀錄。</div>`}</div></div>`}
 function buildDrawer(tab='chapters'){
   const list=$('#chapterList'),marks=$('#bookmarkList');if(!list||!marks)return;
   list.innerHTML=BOOK_CHAPTERS.map((c,i)=>`<button class="drawer-item ${i===state.chapter?'active':''}" data-drawer-ch="${i}">${esc(c.title)}</button>`).join('');
@@ -116,14 +180,16 @@ function bind(){
   $$('[data-ch]').forEach(b=>b.onclick=()=>{state.chapter=+b.dataset.ch;state.route='reader';save();render()});
   $$('[data-prev]').forEach(b=>b.onclick=()=>{if(state.chapter>0){state.chapter--;state.scroll[state.chapter]=0;save();render()}});
   $$('[data-next]').forEach(b=>b.onclick=()=>{state.readChapters[state.chapter]=true;if(state.chapter<BOOK_CHAPTERS.length-1){state.chapter++;state.scroll[state.chapter]=0;save();render()}});
-  $$('[data-quiz]').forEach(b=>b.onclick=()=>startQuiz(b.dataset.quiz==='mock25'?'mock':'practice'));
+  $$('[data-quiz]').forEach(b=>b.onclick=()=>startQuiz(b.dataset.quiz==='mock25'?'mock':(b.dataset.quiz==='groups6'?'groups':'practice')));
   $$('[data-topic]').forEach(b=>b.onclick=()=>startQuiz('practice',b.dataset.topic));
   $$('[data-opt]').forEach(b=>b.onclick=()=>choose(+b.dataset.opt));
+  $$('[data-gqid]').forEach(b=>b.onclick=()=>chooseGroup(b.dataset.gqid,+b.dataset.gopt));
   $$('[data-review-era]').forEach(b=>b.onclick=()=>{state.reviewEra=b.dataset.reviewEra;save();render()});
   $$('[data-review-ch]').forEach(b=>b.onclick=()=>{state.chapter=+b.dataset.reviewCh;state.route='reader';save();render()});
   $$('[data-review-topic]').forEach(b=>b.onclick=()=>startQuizForReview(b.dataset.reviewTopic));
   const nq=$('#nextQ');if(nq)nq.onclick=nextQ;
-  const rw=$('#redoWrong');if(rw)rw.onclick=()=>{const pool=QUESTION_BANK.filter(q=>state.wrong[q.id]?.count>0);quiz={mode:'practice',questions:sample(pool,Math.min(20,pool.length)),i:0,selected:null,correct:0,answers:[],started:Date.now(),topic:'錯題重練'};state.route='quiz';renderQuizQuestion()};
+  const sg=$('#submitGroup');if(sg)sg.onclick=submitGroup;
+  const rw=$('#redoWrong');if(rw)rw.onclick=()=>{const pool=questionCatalog().filter(q=>state.wrong[q.id]?.count>0);const picked=sample(pool,Math.min(20,pool.length));quiz={mode:'practice',items:picked.map(q=>({type:'single',question:q})),itemIndex:0,correct:0,answers:{},draft:{},started:Date.now(),topic:'錯題重練',total:picked.length};state.route='quiz';renderQuizQuestion()};
 }
 $('#menuBtn').onclick=()=>openDrawer('chapters');
 $('#bookmarkTopBtn').onclick=saveBookmark;
