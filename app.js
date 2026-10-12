@@ -231,5 +231,5 @@ document.addEventListener('input',e=>{if(e.target.id==='searchInput')doSearch(e.
 window.addEventListener('scroll',()=>{clearTimeout(window._rt);window._rt=setTimeout(updateReadProgress,120)},{passive:true});
 window.addEventListener('resize',()=>{if(state.layout==='auto')setTheme()});
 setInterval(()=>{if(state.route==='reader'&&!document.hidden){state.readingSeconds=(state.readingSeconds||0)+15;save()}},15000);
-if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js?v=6.0.0',{updateViaCache:'none'}).then(r=>r.update()).catch(()=>{});
+// V7: Service worker disabled to avoid stale quiz code; reading progress remains in localStorage.
 render();
